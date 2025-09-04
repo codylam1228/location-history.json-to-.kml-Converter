@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Location History to KML Converter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Configuration file (load before main script if it exists) -->
+    <script>
+        // Try to load config.js, but don't fail if it doesn't exist (for GitHub Pages)
+        const configScript = document.createElement('script');
+        configScript.src = 'config.js';
+        configScript.onerror = function() {
+            console.log('config.js not found - using fallback configuration');
+        };
+        document.head.appendChild(configScript);
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Google Location History to KML Converter</h1>
+            <p>Convert your Google Location History to KML files with interactive map visualization</p>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="tab-container">
+            <div class="tab-nav">
+                <button class="tab-btn active" data-tab="upload">1. File Upload</button>
+                <button class="tab-btn" data-tab="dates">2. Date Selection</button>
+                <button class="tab-btn" data-tab="settings">3. KML Settings</button>
+                <button class="tab-btn" data-tab="process">4. Process & Download</button>
+                <button class="tab-btn" data-tab="map">5. Map Preview</button>
+                <button class="tab-btn" data-tab="gpsvisualizer">6. GPS Visualizer</button>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- File Upload Tab -->
+                <div id="upload" class="tab-pane active">
+                    <div class="upload-section">
+                        <h2>Upload Location History File</h2>
+                        <div class="file-upload-area" id="fileUploadArea">
+                            <div class="upload-icon">📁</div>
+                            <p>Drag and drop your <code>location-history.json</code> file here</p>
+                            <p>or</p>
+                            <input type="file" id="fileInput" accept=".json" style="display: none;">
+                            <button class="btn btn-primary" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+                                Choose File
+                            </button>
+                        </div>
+                        
+                        <div id="fileInfo" class="file-info" style="display: none;">
+                            <h3>File Information</h3>
+                            <div class="info-grid">
+                                <div class="info-item">
+                                    <span class="label">Filename:</span>
+                                    <span id="fileName"></span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">File Size:</span>
+                                    <span id="fileSize"></span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">Total Records:</span>
+                                    <span id="totalRecords"></span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">Date Range:</span>
+                                    <span id="dateRange"></span>
+                                </div>
+                            </div>
+                            <div id="fileWarning" class="warning" style="display: none;">
+                                ⚠️ Large file detected. Processing may take several seconds.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Date Selection Tab -->
+                <div id="dates" class="tab-pane">
+                    <div class="dates-section">
+                        <h2>Select Time Periods</h2>
+                        <p>Choose one or more time periods to process. Each period will generate a separate KML file.</p>
+                        
+                        <div id="periodsContainer">
+                            <!-- Periods will be added here dynamically -->
+                        </div>
+                        
+                        <button class="btn btn-secondary" id="addPeriodBtn">
+                            + Add Another Period
+                        </button>
+                        
+                        <div id="periodsSummary" class="summary-box" style="display: none;">
+                            <h3>Selected Periods Summary</h3>
+                            <div id="periodsList"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KML Settings Tab -->
+                <div id="settings" class="tab-pane">
+                    <div class="settings-section">
+                        <h2>KML Output Settings</h2>
+                        <p>Customize how your KML files will look in Google Earth.</p>
+                        
+                        <div class="setting-group">
+                            <label for="lineColor">Line Color:</label>
+                            <select id="lineColor">
+                                <option value="red">Red</option>
+                                <option value="blue" selected>Blue</option>
+                                <option value="green">Green</option>
+                            </select>
+                        </div>
+                        
+                        <div class="setting-group">
+                            <label>Waypoint Display:</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="showLabels" checked>
+                                    <span>Labels on waypoints</span>
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="showTickmarks" checked>
+                                    <span>Tickmarks</span>
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="showTrackpoints" checked>
+                                    <span>Trackpoints</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-group">
+                            <label for="mapboxApiKey">Mapbox API Key (Optional):</label>
+                            <div class="api-key-section">
+                                <input type="password" id="mapboxApiKey" placeholder="pk.eyJ1Ijoi..." 
+                                       title="Get your free API key from https://account.mapbox.com/">
+                                <button type="button" id="saveMapboxKey" class="btn btn-secondary">Save</button>
+                                <button type="button" id="clearMapboxKey" class="btn btn-outline">Clear</button>
+                            </div>
+                            <div class="api-key-info">
+                                <small>
+                                    <strong>Free tier:</strong> 100,000 requests/month. 
+                                    <a href="https://account.mapbox.com/" target="_blank">Get your free key here</a>
+                                </small>
+                            </div>
+                            <div id="mapboxUsage" class="usage-info" style="display: none;">
+                                <small>
+                                    <strong>Usage this month:</strong> <span id="usageCount">0</span> / 100,000 requests
+                                    <div class="usage-bar">
+                                        <div id="usageBar" class="usage-progress"></div>
+                                    </div>
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <div class="preview-box">
+                            <h3>Preview</h3>
+                            <div id="kmlPreview">
+                                <p>Your KML files will be generated with these settings.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Process & Download Tab -->
+                <div id="process" class="tab-pane">
+                    <div class="process-section">
+                        <h2>Process & Generate KML Files</h2>
+                        <p>Click the button below to start processing your selected periods.</p>
+                        
+                        <button class="btn btn-primary btn-large" id="processBtn" disabled>
+                            Process Files
+                        </button>
+                        
+                        <div id="processingStatus" class="status-box" style="display: none;">
+                            <h3>Processing Status</h3>
+                            <div id="progressBar" class="progress-bar">
+                                <div id="progressFill" class="progress-fill"></div>
+                            </div>
+                            <p id="progressText">Ready to process...</p>
+                        </div>
+                        
+                        <div id="downloadSection" class="download-section" style="display: none;">
+                            <h3>Generated Files</h3>
+                            <div id="downloadList"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Map Preview Tab -->
+                <div id="map" class="tab-pane">
+                    <div class="map-section">
+                        <h2>Map Preview</h2>
+                        <p>Preview your location data on the map before downloading.</p>
+                        
+                        <div class="map-controls">
+                            <label for="periodSelector">Select Period to View:</label>
+                            <select id="periodSelector">
+                                <option value="">Choose a period...</option>
+                            </select>
+                            <button class="btn btn-secondary" id="loadMapBtn" disabled>
+                                Load Map
+                            </button>
+                        </div>
+                        
+                        <div id="mapContainer" class="map-container">
+                            <div id="map" class="map"></div>
+                        </div>
+                        
+                        <div class="map-info">
+                            <p>This map shows your location data using OpenStreetMap. Use the period selector above to view different time periods.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GPS Visualizer Tab -->
+                <div id="gpsvisualizer" class="tab-pane">
+                    <div class="gpsv-flex">
+                        <div class="gpsv-embed">
+                            <iframe src="https://www.gpsvisualizer.com/map_input?form=googleearth" width="100%" height="600" style="border:1px solid #ccc; border-radius:10px; min-width:320px;" title="GPS Visualizer Google Earth"></iframe>
+                        </div>
+                        <div class="gpsv-tutorial">
+                            <h2>How to Use GPS Visualizer for Google Earth KML</h2>
+                            <ol>
+                                <li><strong>Prepare your file:</strong> Export your KML, GPX, or CSV file from this app or another source.</li>
+                                <li><strong>Upload your file:</strong> In the left panel, click <em>Choose File</em> and select your exported file.</li>
+                                <li><strong>Set output type:</strong> Ensure <em>.kml (uncompressed)</em> is selected for Google Earth.</li>
+                                <li><strong>Adjust options:</strong> (Optional) Set track color, width, opacity, tickmarks, and other advanced options as needed.</li>
+                                <li><strong>Click "Draw the map":</strong> Scroll down and click the <em>Draw the map</em> button.</li>
+                                <li><strong>Download your KML:</strong> After processing, click the <em>Download KML</em> link to save the file to your computer.</li>
+                                <li><strong>Open in Google Earth:</strong> Double-click the downloaded KML file, or import it into <a href="https://earth.google.com/web/" target="_blank">Google Earth Web</a>.</li>
+                            </ol>
+                            <h3>Tips</h3>
+                            <ul>
+                                <li>You can combine multiple files or paste data directly into the form.</li>
+                                <li>Use <strong>Advanced track options</strong> to customize appearance (colorize by speed, altitude, etc.).</li>
+                                <li>Enable <strong>Add DEM elevation data</strong> if you want altitude information in your KML.</li>
+                                <li>For more help, see the <a href="https://www.gpsvisualizer.com/tutorials/" target="_blank">GPS Visualizer Tutorials</a>.</li>
+                            </ul>
+                            <h3>About GPS Visualizer</h3>
+                            <p>
+                                GPS Visualizer is a free online tool for converting GPS data to KML, GPX, and other formats, and for creating maps and profiles. It supports a wide range of input formats and offers many customization options.<br>
+                                <a href="https://www.gpsvisualizer.com/map_input?form=googleearth" target="_blank">Visit GPS Visualizer Google Earth page</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <p>Generated KML files can be opened in <a href="https://www.google.com/earth/" target="_blank">Google Earth</a></p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

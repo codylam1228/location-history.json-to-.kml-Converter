@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KML Converter Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>KML Converter Test - Debug Version</h1>
+    <p>This page tests the file upload functionality with debugging enabled.</p>
+
+    <div class="test-section">
+        <h2>Test File Upload</h2>
+        <p>Try uploading your location-history.json file:</p>
+        <input type="file" id="testFileInput" accept=".json">
+        <button class="test-button" onclick="testFileUpload()">Test Upload</button>
+        <div id="testResult" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Console Output</h2>
+        <p>Check the browser console (F12) for detailed debugging information.</p>
+        <button class="test-button" onclick="clearConsole()">Clear Console</button>
+    </div>
+
+    <script>
+        // Sample activity-based data for testing
+        const sampleActivityData = [
+            {
+                "startTime": "2024-10-30T19:43:56.069+08:00",
+                "endTime": "2024-10-31T11:44:52.624+08:00",
+                "activity": {
+                    "start": "geo:22.420356,114.069468",
+                    "end": "geo:22.335799,114.173673",
+                    "distanceMeters": "14254.994141",
+                    "topCandidate": {
+                        "type": "in passenger vehicle",
+                        "probability": "0.179899"
+                    }
+                }
+            }
+        ];
+
+        function testFileUpload() {
+            const fileInput = document.getElementById('testFileInput');
+            const resultDiv = document.getElementById('testResult');
+            
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = '❌ Please select a file first.';
+                resultDiv.className = 'result error';
+                resultDiv.style.display = 'block';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            console.log('Testing file upload with:', file.name, file.size);
+            
+            // Simulate the file processing
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    console.log('File parsed successfully:', data);
+                    
+                    // Test the conversion logic
+                    let locations = null;
+                    if (data.locations && Array.isArray(data.locations)) {
+                        locations = data.locations;
+                        console.log('Standard format detected');
+                    } else if (Array.isArray(data)) {
+                        console.log('Activity-based format detected, converting...');
+                        locations = convertActivityBasedData(data);
+                    } else {
+                        throw new Error('Invalid format');
+                    }
+                    
+                    resultDiv.innerHTML = `✅ File processed successfully!\n\nFormat: ${Array.isArray(data) ? 'Activity-based' : 'Standard'}\nLocations: ${locations ? locations.length : 0}\nFile size: ${file.size} bytes`;
+                    resultDiv.className = 'result success';
+                    resultDiv.style.display = 'block';
+                    
+                } catch (error) {
+                    console.error('Error processing file:', error);
+                    resultDiv.innerHTML = `❌ Error processing file: ${error.message}`;
+                    resultDiv.className = 'result error';
+                    resultDiv.style.display = 'block';
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+
+        // Copy the conversion function from the main script
+        function convertActivityBasedData(activityData) {
+            const standardLocations = [];
+            
+            for (const record of activityData) {
+                if (record.activity) {
+                    const activity = record.activity;
+                    const startGeo = activity.start;
+                    const endGeo = activity.end;
+                    
+                    // Process start coordinates
+                    if (startGeo && startGeo.startsWith('geo:')) {
+                        const coords = startGeo.replace('geo:', '');
+                        if (coords.includes(',')) {
+                            const [lat, lon] = coords.split(',');
+                            try {
+                                const latFloat = parseFloat(lat);
+                                const lonFloat = parseFloat(lon);
+                                
+                                const latE7 = Math.round(latFloat * 10000000);
+                                const lonE7 = Math.round(lonFloat * 10000000);
+                                
+                                const timestampMs = parseTimestamp(record.startTime);
+                                
+                                standardLocations.push({
+                                    latitudeE7: latE7,
+                                    longitudeE7: lonE7,
+                                    timestampMs: timestampMs.toString(),
+                                    source: 'activity_start'
+                                });
+                            } catch (e) {
+                                console.warn('Failed to parse start coordinates:', startGeo);
+                            }
+                        }
+                    }
+                    
+                    // Process end coordinates
+                    if (endGeo && endGeo.startsWith('geo:')) {
+                        const coords = endGeo.replace('geo:', '');
+                        if (coords.includes(',')) {
+                            const [lat, lon] = coords.split(',');
+                            try {
+                                const latFloat = parseFloat(lat);
+                                const lonFloat = parseFloat(lon);
+                                
+                                const latE7 = Math.round(latFloat * 10000000);
+                                const lonE7 = Math.round(lonFloat * 10000000);
+                                
+                                const timestampMs = parseTimestamp(record.endTime);
+                                
+                                standardLocations.push({
+                                    latitudeE7: latE7,
+                                    longitudeE7: lonE7,
+                                    timestampMs: timestampMs.toString(),
+                                    source: 'activity_end'
+                                });
+                            } catch (e) {
+                                console.warn('Failed to parse end coordinates:', endGeo);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            standardLocations.sort((a, b) => parseInt(a.timestampMs) - parseInt(b.timestampMs));
+            return standardLocations;
+        }
+
+        function parseTimestamp(timeStr) {
+            try {
+                let timeStrClean = timeStr.split('+')[0];
+                if (timeStrClean.endsWith('Z')) {
+                    timeStrClean = timeStrClean.slice(0, -1);
+                }
+                
+                const dt = new Date(timeStrClean);
+                return Math.round(dt.getTime());
+            } catch (e) {
+                return Math.round(Date.now());
+            }
+        }
+
+        function clearConsole() {
+            console.clear();
+            console.log('Console cleared');
+        }
+
+        console.log('Test page loaded successfully');
+        console.log('Sample activity data available for testing');
+    </script>
+</body>
+</html>

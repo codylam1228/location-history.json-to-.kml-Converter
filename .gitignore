@@ -1,0 +1,11 @@
+
+.env
+config.js
+
+*.json
+*.kml
+
+location-history.json
+output.kml
+
+temp/
